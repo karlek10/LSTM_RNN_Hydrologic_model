@@ -201,12 +201,18 @@ class RNN(nn.Module):
         if prints: print("FNN: Final outpu shape:", output.shape, "->[num_batches, num_features]")
         return output
         
-def create_model(save_dir, input_size, hidden_size, num_layers, seq_len_out, device):
+def create_model(save_dir, input_size, hidden_size, num_layers, seq_len_out, architecture = "LSTM", device = "cpu"):
     if os.path.exists(save_dir):
-        model = LSTM(input_size, hidden_size, num_layers, seq_len_out, device)
+        if architecture == "LSTM":
+            model = LSTM(input_size, hidden_size, num_layers, seq_len_out, device)
+        else:
+            model = RNN(input_size, hidden_size, num_layers, seq_len_out, device)
         model, prev_epochs = model_loader(save_dir)
     else:
-        model = LSTM(input_size, hidden_size, num_layers, seq_len_out, device)
+        if architecture == "LSTM":
+            model = LSTM(input_size, hidden_size, num_layers, seq_len_out, device)
+        else:
+            model = RNN(input_size, hidden_size, num_layers, seq_len_out, device)
         prev_epochs = 0
     return model, prev_epochs
 
@@ -286,6 +292,7 @@ def train_network(model, train_loader, test_loader, prev_epochs = 0,
                 test_loss = model_validation(model, test_loader, criterion, device)
                
                 print("TEST | MSE: {:.3f} | RMSE: {:.3f} | k={}".format(test_loss/(k+1), sqrt(test_loss/(k+1)), k+1))
+                steps = 0
         
         loss_vals_train.append(train_loss/len(train_loader))
         loss_vals_test.append(test_loss/len(test_loader))
@@ -359,14 +366,6 @@ def make_prediction(input_data, observed_data, model_data, seq_len_in, model, q_
     return results_df
 
 
-def plot_results(measured, predicted, format = "-", start = 0, end = None):
-    plt.figure(figsize=(16., 6.))
-    plt.plot(measured[start:end], format,  label = "Measured") # plt.plot(pred, label = str(predicted).capitalize() + "_Q " + "($m^3$/s)")
-    plt.plot(predicted, label = "Calculated")
-    plt.xlabel("Time", size=12)
-    plt.ylabel("Runoff ($m^3$/s)", size=12)
-    plt.legend()
-    plt.show()   
 
 
 
