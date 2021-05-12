@@ -47,6 +47,6 @@ if __name__ == "__main__":
     
     results_df = uf.make_prediction(eval_tr, eval_te, model_data, seq_len_in, model, q_scaler)
     
-    uf.plot_timeseries(results_df, start_date="2010-01-01")
+    uf.plot_timeseries(results_df, start_date="2010-01-01", end_date="2010-12-31")
     
     
