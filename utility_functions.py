@@ -38,8 +38,8 @@ def print_vesrions():
 
 
 
-def load_data(basin_name="Sill"):
-    path = "input_data/" + basin_name + "_data.csv"
+def load_data(model_number="Drava_model_1"):
+    path = "input_data/" + model_number + "_input_data.csv"
     df = pd.read_csv(path, parse_dates=["Date"], dayfirst=True, index_col="Date", encoding="windows-1250") # Day first if Croation format
     model_data = df[df.columns[:]].replace(np.nan,0)
     return model_data    
@@ -55,7 +55,7 @@ def plot_loss(epochs, train_loss, test_loss):
     plt.show() 
 
 
-def plot_timeseries(df, start_date=None, end_date = None, xlabel="Date", ylabel="Runoff (m$^3$/s)"):
+def plot_timeseries(df, model_number, start_date=None, end_date = None, xlabel="Date", ylabel="Runoff (m$^3$/s)", label = "Training"):
     """
     Takes in a dataframe, plots the values as timeserieses.
     Parameters
@@ -70,21 +70,24 @@ def plot_timeseries(df, start_date=None, end_date = None, xlabel="Date", ylabel=
         DESCRIPTION. The default is "Runoff (m$^3$/s)".
     """
     sns.set()
-    fig, ax = plt.subplots(figsize=(14,6), dpi=600)
+    fig, ax = plt.subplots(figsize=(14,8), dpi=600)
     df.plot(ax=ax)
     # date fromating
     myFmt = mdates.DateFormatter('%d.%m.%Y')
     ax.xaxis.set_major_formatter(myFmt)
     # format the labels and ticks
-    ax.xaxis.set_tick_params(which='major', pad=7, labelsize=12, rotation=30)
-    ax.xaxis.set_tick_params(which='minor', pad=0, labelsize=11)   
-    ax.yaxis.set_tick_params(which="major", labelsize=14)
-    ax.set_xlabel(xlabel, size=15, va = 'top')
-    ax.set_ylabel(ylabel, size=15)
+    ax.xaxis.set_tick_params(which='major', pad=0, labelsize=18, rotation=30)
+    ax.xaxis.set_tick_params(which='minor', pad=0, labelsize=15)   
+    ax.yaxis.set_tick_params(which="major", labelsize=18)
+    ax.set_xlabel(xlabel, size=18, va = 'top')
+    ax.set_ylabel(ylabel, size=18)
     #setting the axis limits
     ax.set_xlim((start_date, end_date))
-    plt.legend() # display the legend
-    plt.show()          
+    labels = df.columns.tolist()
+    ax.legend(labels=[x.capitalize() for x in labels], fontsize = 18) # display the legend
+    ax.set_title(model_number + " - " + label, fontsize=20)
+    plt.show()
+    fig.savefig(str(label)+ "_"+ str(model_number) + ".png", bbox_inches='tight')         
     
 
 # Streamflow upstream + rain --> streamflow downstream
@@ -140,7 +143,7 @@ def train_val_test_split(model_data,
 
 
 class LSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, seq_len_out, device):
+    def __init__(self, input_size, hidden_size, num_layers, seq_len_out, device, dropout=0.1):
         super(LSTM, self).__init__()
         # Initializing the model parameters
         self.input_size = input_size
@@ -149,7 +152,7 @@ class LSTM(nn.Module):
         self.seq_len_out = seq_len_out
         self.device = device
         # Layer 1: LSTM # batch_size first ()
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first = True, dropout=0.1)
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first = True, dropout=dropout)
         # # Layer 2: Fully coneccted (linear) layer
         self.linear = nn.Linear(self.hidden_size, self.seq_len_out)
     def forward(self, input_seq, prints = False):
@@ -201,20 +204,21 @@ class RNN(nn.Module):
         if prints: print("FNN: Final outpu shape:", output.shape, "->[num_batches, num_features]")
         return output
         
-def create_model(save_dir, input_size, hidden_size, num_layers, seq_len_out, architecture = "LSTM", device = "cpu"):
+def create_model(save_dir, input_size, hidden_size, num_layers, seq_len_out, architecture = "LSTM", device = "cpu", dropout = 0.1):
     if os.path.exists(save_dir):
         if architecture == "LSTM":
             model = LSTM(input_size, hidden_size, num_layers, seq_len_out, device)
         else:
             model = RNN(input_size, hidden_size, num_layers, seq_len_out, device)
-        model, prev_epochs = model_loader(save_dir)
+        model, prev_epochs, optimizer = model_loader(save_dir)
+        return model, prev_epochs, optimizer
     else:
         if architecture == "LSTM":
             model = LSTM(input_size, hidden_size, num_layers, seq_len_out, device)
         else:
             model = RNN(input_size, hidden_size, num_layers, seq_len_out, device)
         prev_epochs = 0
-    return model, prev_epochs
+        return model, prev_epochs
 
 def model_validation(model, test_data, criterion, device):
     """
@@ -240,14 +244,11 @@ def train_network(model, train_loader, test_loader, prev_epochs = 0,
     print ("The model was trained for {} epochs, and will be trained for {} new epochs.".format(prev_epochs, num_epochs))
     # get number of new epochs to train for
     new_epochs = prev_epochs + num_epochs
-   
     # Create Criterion and Optimizer
     criterion = nn.MSELoss()
     optimizer = optim.Adamax(model.parameters(), lr = learning_rate)
-    
     print ("Training started...")
     # Train the data multiple times
-        
     print_every = 25
     steps = 0
     loss_vals_train = []
@@ -258,32 +259,24 @@ def train_network(model, train_loader, test_loader, prev_epochs = 0,
         test_loss = 0
         print ("Epoch {}/{}".format(epoch+1, new_epochs))
         print ("-" * 20)
-        
         # Set the model to training mode
         model.train()
         model.to(device)        
-        
         for k, (x, y) in enumerate(train_loader): # k je iteracija -- > if k % 1 == 0: print ....
             x, y = x.to(device), y.to(device)
             steps += 1
-           
             # getion the outputs of the network
             out = model(x)
-            
             # Clear the gradients from the prviuos iteration
-            optimizer.zero_grad()
-            
+            optimizer.zero_grad() 
             # Compute the loss
             loss = criterion(out, y)
-            
             # Compute the gradients for the neurons
             loss.backward()
             # Save Loss after each iteration
             train_loss += loss.item()
             # Update the weights
             optimizer.step()
-        
-            
             # Print Loss per training epoch   
             
             if steps % print_every == 0:
@@ -291,15 +284,11 @@ def train_network(model, train_loader, test_loader, prev_epochs = 0,
                 
                 test_loss = model_validation(model, test_loader, criterion, device)
                
-                print("TEST | MSE: {:.3f} | RMSE: {:.3f} | k={}".format(test_loss/(k+1), sqrt(test_loss/(k+1)), k+1))
-                steps = 0
-        
+                print("TEST  | MSE: {:.3f} | RMSE: {:.3f} | k={}".format(test_loss/(k+1), sqrt(test_loss/(k+1)), k+1))
+        steps = 0
         loss_vals_train.append(train_loss/len(train_loader))
         loss_vals_test.append(test_loss/len(test_loader))
-        
-
     plot_loss(range(prev_epochs, new_epochs), loss_vals_train, loss_vals_test)
-    
     checkpoint = {"model": model,
                   "epoch": epoch+1,
                   "model_state": model.state_dict(),
@@ -326,9 +315,34 @@ def model_loader(file_pth, device = "cpu"):
     optimizer = checkpoint["optimizer_state"]
     prev_epochs = checkpoint["epoch"]
     
-    return model, prev_epochs
+    return model, prev_epochs, optimizer
 
-def get_metrics(predicted, observed):
+def get_metrics(df):
+    """
+    Parameters
+    ----------
+    df - results dataframe from the model
+    Returns
+    -------
+    metrics : dictionary - metrics values - mse, rmse, nse, r2, mae
+    """
+    pred = df["predicted"]
+    obs = df["observed"]
+    if len(pred) == len (obs):
+        nse = 1-(np.sum(np.square(obs - pred)/np.sum(np.square(obs - np.mean(obs)))))
+        mse = 1/len(pred)*np.sum(np.square(obs-pred))
+        rmse = np.sqrt(mse)
+        ss_res=np.square(np.sum((obs-np.mean(obs))*(pred-np.mean(pred))))
+        ss_tot=np.sum(np.square(obs-np.mean(obs)))*np.sum(np.square(pred-np.mean(pred)))        
+        r2 = ss_res/ss_tot
+        mae = 1/len(pred)*np.sum(np.absolute(obs-pred))
+        metrics = {"MSE": mse, "RMSE":rmse, "NSE":nse, "R2":r2, "MAE":mae}
+        return metrics
+    
+    
+def get_metrics_sep(df, train_end = "2006-01-01", 
+                         val_start="2009-01-01", 
+                         test_start="2012-01-01",):
     """
     Parameters
     ----------
@@ -338,18 +352,21 @@ def get_metrics(predicted, observed):
     -------
     metrics : dictionary - metrics values
     """
-    if len(predicted) == len (observed):
-        nse = 1-(np.sum(np.square(predicted - observed))/np.sum(np.square(observed - np.mean(observed))))
-        mse = 1/len(predicted)*np.sum(np.square(observed-predicted))
-        rmse = np.sqrt(mse)
-        ss_res=np.square(np.sum((observed-np.mean(observed))*(predicted-np.mean(predicted))))
-        ss_tot=np.sum(np.square(observed-np.mean(observed)))*np.sum(np.square(predicted-np.mean(predicted)))        
-        r2 = ss_res/ss_tot
-        mae = np.sum(np.absolute(predicted-observed))/len(predicted)
-        metrics = {"MSE": mse, "RMSE":rmse, "NSE":nse, "R2":r2, "MAE":mae}
-        return metrics
+    df_train = df.loc[:train_end]
+    df_valid = df.loc[val_start:test_start]
+    df_test = df.loc[test_start:]
+    
+    metrics_train = get_metrics(df_train)
+    metrics_valid = get_metrics(df_valid)
+    metrics_test = get_metrics(df_test)
+    metrics_sep_dict = {"Train_metrics": metrics_train,
+                        "Valid_metrics": metrics_valid,
+                        "Test_metrics": metrics_test}
+    return metrics_sep_dict
+    
 
-def make_prediction(input_data, observed_data, model_data, seq_len_in, model, q_scaler):
+
+def make_prediction(input_data, observed_data, model_data, seq_len_in, model, q_scaler, model_number, train_end):
     model.to("cpu")
     model.eval()
     with torch.no_grad():
@@ -360,9 +377,9 @@ def make_prediction(input_data, observed_data, model_data, seq_len_in, model, q_
     #starting_date = model_data.index[0]+datetime.timedelta(days=seq_len_in)
     dates = pd.date_range(start=model_data.index[0]+datetime.timedelta(days=seq_len_in+1), 
                           periods=len(model_data)-(seq_len_in+1))
-    results_df = pd.DataFrame({"observed":observed, "predicted":predicted}, columns=["observed", "predicted"])
+    results_df = pd.DataFrame({"observed":observed, "predicted":predicted}, columns=["observed", "predicted"], dtype=np.float32)
     results_df.index = dates
-    plot_timeseries(results_df, start_date=dates[0], end_date=dates[-1])
+    # plot_timeseries(results_df, model_number, start_date=dates[0], end_date=datetime.datetime.strptime(train_end, "%Y-%m-%d"))
     return results_df
 
 
