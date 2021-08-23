@@ -35,6 +35,7 @@ num_epochs = 30                 # number of new epochs to train for
 learning_rate = 0.00035          # learning rate
 device = "cuda"                 # select the device to train on "cuda" or "cpu"
 model_number = "Drava_model_3"        # model number
+resume_training = True
 # ============================
 
 
@@ -50,8 +51,14 @@ if __name__ == "__main__":
     train_loader, valid_loader, test_loader, q_scaler, df_scaler, train_scaled, valid_scaled, test_scaled = uf.train_val_test_split(
         model_data, train_end,  val_start, test_start, seq_len_in, seq_len_out, input_size)  
     
-    model, prev_epochs = uf.create_model(save_dir, input_size, hidden_size, num_layers, 
-                                         seq_len_out, network_architecture, device, dropout)
+    
+    # Dotjerati ovaj resume training da ne zeza kod otpakiravanja novog modela !!!!!
+    if resume_training:
+        model, prev_epochs = uf.create_model(save_dir, input_size, hidden_size, num_layers, 
+                                             seq_len_out, network_architecture, device, dropout)
+    else:
+        model, prev_epochs = uf.create_model(save_dir, input_size, hidden_size, num_layers, 
+                                     seq_len_out, network_architecture, device, dropout)
 
     checkpoint =  uf.train_network(model, train_loader, valid_loader, prev_epochs=prev_epochs, num_epochs=num_epochs, 
                                 num_batches= num_batches, learning_rate = learning_rate, device = device)

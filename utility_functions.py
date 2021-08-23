@@ -166,12 +166,13 @@ class LSTM(nn.Module):
                           "->[num_layers*num_directions, num_batches, hidden_size]", "\n"
                           "LSTM: c_state shape:", c_state.shape, 
                           "->[num_layers*num_directions, num_batches, hidden_size]")
-        # Reshape 
+        # Reshaping to take last tensor as output
         output = output[:, -1, :]
-        if prints: print("Output reshaped:", output.shape, "->[num_batches, hidden_size]")
+        if prints: print("LSTM Output reshaped:", output.shape, "->[num_batches, hidden_size]")
         # Fully connected layer
         output = self.linear(output)
         if prints: print("FNN: Final outpu shape:", output.shape, "->[num_batches, num_features]")
+        #print ("type of the LSTM output is: ", type(output))
         return output
         
 class RNN(nn.Module):

@@ -35,16 +35,16 @@ def read_dfs(filename, select_metrics):
     return df
 
 
-def plot_metrics_bar(df, metric):
+def plot_metrics_bar(df, metric, transparency = True):
     fig, ax = plt.subplots(figsize=(10,8), dpi=600)
     df.plot.bar(ax = plt.gca())
     ax.set_ylim(df.to_numpy().min()*0.95, df.to_numpy().max()*1.05)
-    ax.xaxis.set_tick_params(which='major', pad=7, labelsize=18, rotation=0)
-    ax.yaxis.set_tick_params(which='major', pad=7, labelsize=18, rotation=0)
-    ax.set_title(metric.upper(), fontsize=20)
-    ax.legend(fontsize=18)
+    ax.xaxis.set_tick_params(which='major', pad=7, labelsize=22, rotation=0)
+    ax.yaxis.set_tick_params(which='major', pad=7, labelsize=22, rotation=0)
+    ax.set_title(metric.upper(), fontsize=28)
+    ax.legend(fontsize=22)
   
-    fig.savefig(metric+".png")
+    fig.savefig(metric+".png", transparent=transparency)
     print ("Graphs have been saved to result_mertrics folder.")
     
     
@@ -68,5 +68,5 @@ if __name__ == "__main__":
     df = pd.concat(dict_files)[select_metrics]
 
     for metric in df.columns:
-        plot_metrics_bar(df[metric].unstack(), metric)
+        plot_metrics_bar(df[metric].unstack(), metric, transparency=False)
         
